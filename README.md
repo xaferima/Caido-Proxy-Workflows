@@ -12,4 +12,7 @@ https://docs.caido.io/reference/workflows/workflows.html
   - **SearchDataInBody.json:**
     This workflow is designed to search for a specific data term: in the request and response bodies intercepted by the Caido platform. It generates findings based on the presence and values of this term.
 
+  - **UnmaskedSensitiveDataSearch.json:**
+    This workflow searches for specific terms in HTTP request and response bodies, identifying and reporting values that are not properly masked. It generates findings in Caido for any uncovered sensitive data.
+
 
