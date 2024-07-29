@@ -1,0 +1,131 @@
+{
+  "description": "This script searches for specific terms in HTTP request and response bodies, identifying and reporting values that are not properly masked. It generates findings in Caido for any uncovered sensitive data.",
+  "edition": 2,
+  "graph": {
+    "edges": [
+      {
+        "source": {
+          "exec_alias": "exec",
+          "node_id": 14
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 15
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "true",
+          "node_id": 15
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 13
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "exec",
+          "node_id": 13
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 5
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "false",
+          "node_id": 15
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 5
+        }
+      }
+    ],
+    "nodes": [
+      {
+        "alias": "passive_end_1",
+        "definition_id": "caido/passive-end",
+        "display": {
+          "x": 90,
+          "y": 280
+        },
+        "id": 5,
+        "inputs": [],
+        "name": "Passive End 1",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "search_data",
+        "definition_id": "caido/http-code-js",
+        "display": {
+          "x": -90,
+          "y": 150
+        },
+        "id": 13,
+        "inputs": [
+          {
+            "alias": "request",
+            "value": {
+              "data": "$res.request",
+              "kind": "ref"
+            }
+          },
+          {
+            "alias": "response",
+            "value": {
+              "data": "$res.response",
+              "kind": "ref"
+            }
+          },
+          {
+            "alias": "code",
+            "value": {
+              "data": "/**\n * @param {HttpInput} input\n * @param {SDK} sdk\n * @returns {MaybePromise<Data | undefined>}\n */\nlet title = \"Value Not Properly Masked\";\nconst reporter = \"Not Masked\";\nconst searchTerms = ['id_number','account','email']; // Terms to search\nlet valuesFound = []; // Array to store all found values\nlet sdka;\n\n\n\nexport async function run({ request, response }, sdk) {\n    let idReq = request.getId();\n    let idRes = response.getId();\n    sdka = sdk;\n  \n    if (request) {\n      let body = request.getBody().toText();\n      for (const searchTerm of searchTerms) {\n        findAndNotMaskValues(body, searchTerm);\n        if (valuesFound.length > 0) {\n          const findingDescription = `The following not masked values(${searchTerm}) were found in the request with ID:req ${idReq} res ${idRes}:\\n\\n${valuesFound.join(\"\\n\")}`;\n          sdk.console.log(findingDescription);\n          const requestTitle = title + \" in request(\" + searchTerm + \")\";\n          await createFinding(sdk, requestTitle, findingDescription, \"LOW\", request);\n        } else {\n          sdk.console.log(`No values found for \"${searchTerm}\" in the request with ID:req ${idReq} res ${idRes}.`);\n        }      \n        valuesFound = [];\n      }\n\n    }\n  \n    if (response) {\n      let body = response.getBody().toText();\n      for (const searchTerm of searchTerms) {\n        findAndNotMaskValues(body, searchTerm);\n        if (valuesFound.length > 0) {\n          const findingDescription = `The following not masked values(${searchTerm}) were found in the response with ID:req ${idReq} res ${idRes}:\\n\\n${valuesFound.join(\"\\n\")}`;\n          sdk.console.log(findingDescription);\n          const responseTitle = title + \" in response(\" + searchTerm + \")\";\n          await createFinding(sdk, responseTitle, findingDescription, \"LOW\", request);\n        } else {\n          sdk.console.log(`No values found for \"${searchTerm}\" in the response with ID:req ${idReq} res ${idRes}.`);\n        }\n      valuesFound = [];\n      }\n    }\n\n\n    async function processBody(httpObject, idReq, idRes, type) {\n        let body = httpObject.getBody().toText();\n          for (const searchTerm of searchTerms) {\n          let valuesFound = [];\n          findAndNotMaskValues(body, searchTerm, valuesFound);\n          if (valuesFound.length > 0) {\n            const findingDescription = `The following not masked values(${searchTerm}) were found in the ${type} with ID:req ${idReq} res ${idRes}:\\n\\n${valuesFound.join(\"\\n\")}`;\n            sdkGlobal.console.log(findingDescription);\n            const objectTitle = title + ` in ${type}(${searchTerm})`;\n            await createFinding( objectTitle, findingDescription, \"LOW\", httpObject);\n          } else {\n            sdkGlobal.console.log(`No values found for \"${searchTerm}\" in the ${type} with ID:req ${idReq} res ${idRes}.`);\n          }\n        }\n      }\n  }\n//Functions\n\n  \n  async function createFinding(sdk, title, description, severity, request = null) {\n    try {\n      await sdk.findings.create({\n        title: title,\n        reporter: reporter,\n        request: request,\n        description: description,\n        severity: severity,\n      });\n      sdk.console.log(`Finding successfully created: ${title}`);\n    } catch (error) {\n      sdk.console.error(`Error creating finding: ${error.message}`);\n    }\n  }\n  \nfunction findAndNotMaskValues(body,searchTerm) {\n    let searchTermIndex = body.indexOf(searchTerm);\n    while (searchTermIndex !== -1) {\n        // Find the start index of the value\n        let valueStartIndex = searchTermIndex + searchTerm.length;\n        let valueEndIndex = Math.min(\n            body.indexOf(',', valueStartIndex), // if it ends with ,\n            body.indexOf('}', valueStartIndex)  // if it ends with }\n        );\n        \n        // If neither a comma nor a closing brace is found, take until the end of the body\n        if (valueEndIndex === -1 || valueEndIndex > body.length) {\n            valueEndIndex = body.length;\n        }\n        \n        // Extract the value\n        let value = body.substring(valueStartIndex, valueEndIndex).trim();\n        // Remove double quotes, single quotes, and colons\n        value = value.replace(/[\"}':\\s]/g, '');  // Remove quotes and colons\n        if (!isMasked(value)) { // Only add if not masked\n          valuesFound.push(value);\n        }\n        // Move to the next search term\n        searchTermIndex = body.indexOf(searchTerm, valueEndIndex);\n    }\n}\n\n  \n  \n  function isMasked(value) {\n    // Check if the value is masked (i.e., not all characters are '*')\n    if (value.length <= 4) return false; // No masking needed if length is 4 or less\n    const maskedPart = value.slice(0, -4);\n    return maskedPart.split('').every(char => char === '*');\n  }\n\n",
+              "kind": "string"
+            }
+          }
+        ],
+        "name": "Search Data in Body",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "res",
+        "definition_id": "caido/on-intercept-response",
+        "display": {
+          "x": 30,
+          "y": -110
+        },
+        "id": 14,
+        "inputs": [],
+        "name": "On Intercept Response",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "in_scope",
+        "definition_id": "caido/in-scope",
+        "display": {
+          "x": 30,
+          "y": 40
+        },
+        "id": 15,
+        "inputs": [
+          {
+            "alias": "request",
+            "value": {
+              "data": "$res.request",
+              "kind": "ref"
+            }
+          }
+        ],
+        "name": "In Scope",
+        "version": "0.1.0"
+      }
+    ]
+  },
+  "id": "unique-id-for-plugin",
+  "kind": "passive",
+  "name": "Unmasked Sensitive Data Search"
+}
