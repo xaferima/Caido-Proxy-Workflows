@@ -10,6 +10,6 @@ https://docs.caido.io/reference/workflows/workflows.html
 
 ## Workflows:
   - **SearchDataInBody.json:**
-    This plugin is designed to search for a specific data term: in the request and response bodies intercepted by the Caido platform. It generates findings based on the presence and values of this term.
+    This workflow is designed to search for a specific data term: in the request and response bodies intercepted by the Caido platform. It generates findings based on the presence and values of this term.
 
 
