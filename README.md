@@ -16,3 +16,4 @@ https://docs.caido.io/reference/workflows/workflows.html
     This workflow searches for specific terms in HTTP request and response bodies, identifying and reporting values that are not properly masked. It generates findings in Caido for any uncovered sensitive data.
 
 
+
