@@ -127,5 +127,5 @@
   },
   "id": "unique-id-for-plugin",
   "kind": "passive",
-  "name": "Unciphered Sensitive Data Search"
+  "name": "UncipheredSensitiveDataSearch"
 }
