@@ -1,0 +1,131 @@
+{
+  "description": "This script searches for specific terms in HTTP request and response bodies, identifying and reporting any sensitive data that is not cipher. It generates findings in Caido for any detected unencrypted data.",
+  "edition": 2,
+  "graph": {
+    "edges": [
+      {
+        "source": {
+          "exec_alias": "exec",
+          "node_id": 14
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 15
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "true",
+          "node_id": 15
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 13
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "exec",
+          "node_id": 13
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 5
+        }
+      },
+      {
+        "source": {
+          "exec_alias": "false",
+          "node_id": 15
+        },
+        "target": {
+          "exec_alias": "exec",
+          "node_id": 5
+        }
+      }
+    ],
+    "nodes": [
+      {
+        "alias": "end1",
+        "definition_id": "caido/passive-end",
+        "display": {
+          "x": 90,
+          "y": 280
+        },
+        "id": 5,
+        "inputs": [],
+        "name": "End",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "search_data",
+        "definition_id": "caido/http-code-js",
+        "display": {
+          "x": -90,
+          "y": 150
+        },
+        "id": 13,
+        "inputs": [
+          {
+            "alias": "request",
+            "value": {
+              "data": "$res.request",
+              "kind": "ref"
+            }
+          },
+          {
+            "alias": "response",
+            "value": {
+              "data": "$res.response",
+              "kind": "ref"
+            }
+          },
+          {
+            "alias": "code",
+            "value": {
+              "data": "/**\n * @param {HttpInput} input\n * @param {SDK} sdk\n * @returns {MaybePromise<Data | undefined>}\n */\nlet title = \"Unciphered Sensitive Data Found\";\nconst reporter = \"Not-ciphered Detector\";\nconst searchTerms = ['id_number','account','email']; // Terms to search\nlet valuesFound = []; // Array to store all found values\nlet sdkGlobal;\n\nexport async function run({ request, response }, sdk) {\n  let idReq = request.getId();\n  let idRes = response.getId();\n  sdkGlobal = sdk;\n\n  if (request) {\n    await processBody(request, idReq, idRes, \"request\");\n  }\n\n  if (response) {\n    await processBody(response, idReq, idRes, \"response\");\n  }\n}\n\n\n  \n//Functions\nasync function processBody(httpObject, idReq, idRes, type) { //This function extracts the body of the provided HTTP object and searches for terms defined in `searchTerms`.\n  let body = httpObject.getBody().toText();\n    for (const searchTerm of searchTerms) {\n    valuesFound = [];\n    findNotEncryptedValues(body, searchTerm);\n    if (valuesFound.length > 0) {\n      const findingDescription = `The following not-cipher values(${searchTerm}) were found in the ${type} with ID:req ${idReq} res ${idRes}:\\n\\n${valuesFound.join(\"\\n\")}`;\n      sdkGlobal.console.log(findingDescription);\n      const objectTitle = title + ` in ${type}(${searchTerm})`;\n      sdkGlobal.console.log(valuesFound);\n      await createFinding( objectTitle, findingDescription, \"LOW\", httpObject);\n    } else {\n      sdkGlobal.console.log(`No values found for \"${searchTerm}\" in the ${type} with ID:req ${idReq} res ${idRes}.`);\n    }\n  }\n}\n  \nfunction findNotEncryptedValues(body,searchTerm) { // Searches for unmasked values of a specific term in the body and adds them to the valuesFound array.\n    let searchTermIndex = body.indexOf(searchTerm);\n    while (searchTermIndex !== -1) {\n        // Find the start index of the value\n        let valueStartIndex = searchTermIndex + searchTerm.length;\n        let valueEndIndex = Math.min(\n            body.indexOf(',', valueStartIndex), // if it ends with ,\n            body.indexOf('}', valueStartIndex)  // if it ends with }\n        );        \n        // If neither a comma nor a closing brace is found, take until the end of the body\n        if (valueEndIndex === -1 || valueEndIndex > body.length) {\n            valueEndIndex = body.length;\n        }\n       \n        // Extract the value\n        let value = body.substring(valueStartIndex, valueEndIndex).trim();\n        // Remove double quotes, single quotes, and colons\n        value = value.replace(/[\"}':\\s]/g, '');  // Remove quotes and colons\n          // Extract part before '@' if it exists\n        if (value.includes('@')) {\n          value = value.split('@')[0];\n        }\n        if (!isCipher(value)) { // Only add if not cipher\n              valuesFound.push(value);\n        }\n        // Move to the next search term     \n        searchTermIndex = body.indexOf(searchTerm, valueEndIndex);\n    }\n}\n\n  \n  \n  function isBase64(value) {\n  // Check if the value looks like a base64-encoded string\n    const base64Pattern = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;\n    if (base64Pattern.test(value)) {\n      return true;\n    }\n  }\n\nfunction isAES(value) {\n    const aesPattern = /^(?=.*[A-Za-z0-9+/]{22,})([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;\n    let flag=false;\n      if (isBase64(value) && value.length % 16 ) {\n        let decodedValue = decodeBase64(value);    \n          sdkGlobal.console.log(\"       paso1\"+flag);\n        if (aesPattern.test(decodedValue) && decodedValue.length % 16 === 0) {   \n          sdkGlobal.console.log(\"       paso2\"+flag);\n          flag =true;\n          }\n        }\n        else if(aesPattern.test(value)){\n          flag=true;\n          sdkGlobal.console.log(\"       paso3\"+flag);\n        }\n        return flag;\n}\n\n\n    // Check if the length is a multiple of 32 (AES block size in hex representation)\n  //  return value.length % 32 === 0;\n//\n\nfunction isCipher(value) {\n  // Check if the value looks like a hex-encoded string\n    let flag=false;\n /*   if (isBase64(value)) {\n      flag=true;\n    }*/\n  \n    if (isAES(value)) {\n      flag=true;\n    }\n    return flag;\n  }\n\n\n  \n  async function createFinding( title, description, severity, request = null) { // Creates a finding with the given title, description, severity, and request, and logs the result or any errors.\n\n    try {\n      await sdkGlobal.findings.create({\n        title: title,\n        reporter: reporter,\n        request: request,\n        description: description,\n        severity: severity,\n      });\n      sdkGlobal.console.log(`Finding successfully created: ${title}`);\n    } catch (error) {\n      sdkGlobal.console.error(`Error creating finding: ${error.message}`);\n    }\n  }\n\n\nfunction decodeBase64(s) {\n    var e = {}, i, b = 0, c, x, l = 0, a, r = '', w = String.fromCharCode, L = s.length;\n    var A = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\";\n\n    // Create a map for Base64 characters to their values\n    for (i = 0; i < 64; i++) {\n        e[A.charAt(i)] = i;\n    }\n\n    // Decode the Base64 string\n    for (x = 0; x < L; x++) {\n        c = e[s.charAt(x)];\n        b = (b << 6) + c;\n        l += 6;\n        while (l >= 8) {\n            a = (b >> (l -= 8)) & 0xff;\n            if (a || x < L - 2) { // Avoid appending padding characters\n                r += w(a);\n            }\n        }\n    }\n\n    return r;\n}\n",
+              "kind": "string"
+            }
+          }
+        ],
+        "name": "Uncipher Data in Body",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "res",
+        "definition_id": "caido/on-intercept-response",
+        "display": {
+          "x": 30,
+          "y": -110
+        },
+        "id": 14,
+        "inputs": [],
+        "name": "On Intercept Response",
+        "version": "0.1.0"
+      },
+      {
+        "alias": "in_scope",
+        "definition_id": "caido/in-scope",
+        "display": {
+          "x": 30,
+          "y": 40
+        },
+        "id": 15,
+        "inputs": [
+          {
+            "alias": "request",
+            "value": {
+              "data": "$res.request",
+              "kind": "ref"
+            }
+          }
+        ],
+        "name": "In Scope",
+        "version": "0.1.0"
+      }
+    ]
+  },
+  "id": "unique-id-for-plugin",
+  "kind": "passive",
+  "name": "Unciphered Sensitive Data Search"
+}

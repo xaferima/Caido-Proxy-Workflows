@@ -15,5 +15,8 @@ https://docs.caido.io/reference/workflows/workflows.html
   - **UnmaskedSensitiveDataSearch.json:**
     This workflow searches for specific terms in HTTP request and response bodies, identifying and reporting values that are not properly masked. It generates findings in Caido for any uncovered sensitive data.
 
+  - **UncipheredSensitiveDataSearch.json:**
+    This script searches for specific terms in HTTP request and response bodies, identifying and reporting any sensitive data that is not cipher. It generates findings in Caido for any detected unencrypted data.
+
 
 
